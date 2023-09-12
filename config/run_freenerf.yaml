@@ -1,0 +1,134 @@
+seed: 1
+dataset_name: xyz_t_8-10
+data_dir: data/DeformingThings4D/animals
+work_dir: ./Test_freenerf/${dataset_name}
+exp_name: bear3EP_attack1
+latent_dim: 1 # 8
+num_workers: 0 # 16
+
+dataset:
+    module_name: DeformingThings4D
+    class_name: DeformingThings4D_NGP
+    data_dir: ${data_dir}
+    exp_name: ${exp_name}
+    num_samples: 262144 # 2**18
+    sample_mode: True
+    frames: [8, 10]
+    surface_normal: False
+    data_term: True 
+    meshgrid_size: 18
+    shuffle: True
+    clip_sdf: None
+    # if True: the topology loss will use Full_SDF, False -- Full_udf !!!!!!!!!!!!!!!!!!!!!
+    # interp模式要把下方的Topology_loss设为False
+
+
+# sdf_asap_start_epoch: 400
+
+model: 
+    SDF_type: freenerf
+    sdf:
+        module_name: NGP_3Dsdfnet_GT
+        class_name: SdfNet
+        latent_size: ${latent_dim}
+
+    freenerf:
+        module_name: NGP_3Dsdfnet_GT
+        class_name: SdfNet
+        dims : [ 128, 256, 256, 256, 256, 128, 128, 128]
+        dropout : [0, 1, 2, 3, 4, 5, 6, 7]
+        dropout_prob : 0.02
+        norm_layers : [0, 1, 2, 3, 4, 5, 6, 7] # [0, 1, 2, 3, 4, 5, 6, 7]
+        latent_in : [3]
+        query_dim: 3 # 2 for 2D, 3 for 3D
+        use_xyz_encoder: True
+        xyz_encoder:
+            type: 'frequency'
+            input_dim: 3
+            freq: 10
+            MLP_dim: 64
+            num_layers: 3
+            hidden_dim: 64
+        use_time_encoder: False
+        time_encoder:
+            type: 'hashgrid' # 'frequency'
+            input_dim: 1
+            freq: 4
+            MLP_dim: 4
+            num_layers: 3
+            hidden_dim: 8
+            embedding_dim: 128
+        freq_mask_max_epoch: 3001
+
+sdf_asap_weight_epoch: 1e-5
+
+loss:
+    # Mesh ARAP loss
+    arap_weight: 5e-4
+    use_mesh_arap_epoch: 8000000
+    nz_max: 60 # random sample nz_max latent channels to compute ARAP energy
+    # SDF loss
+    clamp_dist: 0.1
+    truncated_dist: 0.1
+    sdf_weight: 1.
+    data_term_surface_points_weight: 1e3 # 1e4
+    gradient_loss: False
+    data_term_gradient_weight: 5e1 # 5e1
+    inter_constraint_loss: False
+    data_term_inter_constraint_weight: 1e2
+    data_term_surface_normal_weight: 1e2
+    sdf_asap_weight: 10.
+    sdf_arap_begin_epoch: 11999 #1999
+    sdf_arap_end_epoch: 12000 #2000
+    code_reg_weight: 0 # 0.0001
+    # SDF surfafe ARAP loss
+    topology_PD_loss: False
+    topology_PD_loss_begin_epoch: 0
+    topology_PD_loss_type: identical
+    Topology_loss_coefficient: 10
+    sdf_loss_type: L1
+    weight_asap: 0
+    num_ring: 5
+    mu_asap: 0.0001
+    use_discrete_jac: False
+    sample_latent_space: True
+    sample_latent_space_type: line-identical
+    eps_x: 0.001
+    eps_z: 0.001d
+    sdf_grid_size: 64
+    x_range: [-1, 1]
+    y_range: [-1, 1]
+    z_range: [-1, 1]
+    simplify_mesh: True
+    implicit_reg_type: dense_inverse
+    use_eval_mode_sdf_to_mesh2d: True
+    use_eval_mode_get_jacobian: True
+    detach_fx: False
+    
+
+
+optimization:
+    sdf:
+        batch_size: 1 # 26
+        num_epochs: 6001 # 3001
+        schedular: 'OneCycleLR'
+        OneCycleLR:
+            init_lr: 1.6e-4
+            max_lr: 5e-3
+            fin_lr: 6e-6
+            cyc_frac: 0.3
+            growth_int: 1024
+            min_momentum: 0.89
+            max_momentum: 0.93
+
+        MultiplicativeLRSchedule:
+            lr: 0.0005
+            gammas:     [1,   1,  0.2,    1,  1,  1,  0.5, 1]
+            # milestones: [1000, 2000, 3000, 4000, 5000, 6000, 7000]
+            milestones: [1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500]
+    
+
+log:
+    print_batch_interval: 100
+    save_epoch_interval: 500 # 500
+    save_latest_epoch_interval: 100 # 100
