@@ -647,6 +647,11 @@ class DeformingThings4D_NGP(torch.utils.data.Dataset):
         if len(self.frames) == 2:
             bgn, end = self.frames
             self.frames = list(range(bgn, end+1))
+            self.frames_time = np.linspace(0, 1, len(self.frames))
+        elif len(self.frames) == 3:
+            bgn, end, step = self.frames
+            self.frames = list(range(bgn, end+1, step))
+            self.frames_time = np.linspace(0, 1, end+1 - bgn)[self.frames]
         self.num_data = len(self.frames)
         meshes_w_normal = sorted(glob.glob(os.path.join(data_dir, exp_name, 'global_w_normal_obj', '*.obj')))
         self.meshes = []
@@ -677,14 +682,16 @@ class DeformingThings4D_NGP(torch.utils.data.Dataset):
         return self.num_data
 
     def __getitem__(self, idx):
-        # print('idx before: ', idx)
-        if self.__len__() == 1:
-            time = np.array( ( 0 )).astype(np.float32)
-        else:
-            time = np.array( ( idx ) / (self.__len__() - 1)).astype(np.float32)
-            # time = idx
+        # import ipdb; ipdb.set_trace()
+        
+        # # print('idx before: ', idx)
+        # if self.__len__() == 1:
+        #     time = np.array( ( 0 )).astype(np.float32)
+        # else:
+        #     # time = np.array( ( idx ) / (self.__len__() - 1)).astype(np.float32)
+        #     # time = idx
+        time = self.frames_time[idx].astype(np.float32)
         idx = self.frames[idx]
-        # print('idx after: ', idx, ' time: ', time)
         # import ipdb; ipdb.set_trace()
         data_dict = {}
         mesh = self.meshes[idx]

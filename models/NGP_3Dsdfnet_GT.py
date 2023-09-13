@@ -11,6 +11,7 @@ from skimage import measure
 import trimesh
 
 from models.sdfnet_base import SdfDecoder, SdfDecoder_Encoder, SdfDecoder_Modify, SdfDecoder_freenerf, SdfDecoder_Weightnorm
+from models.MultiMLP_base import SdfDecoder_MultiMLP
 from models.NGP_warpnet import SDF_Warping
 from models.NGP_sdfnet_base import SDFNetwork
 from utils.diff_operators import gradient
@@ -60,6 +61,7 @@ class SdfNet(nn.Module):
         super().__init__()
         self.config = config
         self.freenerf = False
+        self.MultiMLP = False
 
         if config.model.SDF_type == 'NGP_sdf':
             self.decoder = SDFNetwork(**config.model.NGP_sdf)
@@ -74,6 +76,9 @@ class SdfNet(nn.Module):
         elif config.model.SDF_type == 'freenerf':
             self.decoder = SdfDecoder_freenerf(**config.model.freenerf)
             self.freenerf = True
+        elif config.model.SDF_type == 'MultiMLP':
+            self.decoder = SdfDecoder_MultiMLP(**config.model.MultiMLP)
+            self.MultiMLP = True
         else:
             raise NotImplementedError
         if config.loss.topology_PD_loss:
@@ -101,6 +106,8 @@ class SdfNet(nn.Module):
             sdf_pred = self.decoder(repeat(time, 'B d -> (B S) d', S=S),
                                     rearrange(query, 'B S d -> (B S) d'),
                                     batch_dict['epoch'])
+        elif self.MultiMLP:
+            sdf_pred = self.decoder(time, query)
         else:
             # if batch_dict['time'] == 0:
             #     is_canonical = True

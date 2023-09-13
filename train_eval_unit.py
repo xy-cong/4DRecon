@@ -95,15 +95,28 @@ def train_one_epoch(state_info, config, fabric, train_loader, model, optimizer_t
                     batch_dict['point_samples'] = rand_coords
                     (_, d_rand_coords) = model(batch_dict)
                     d_rand_coords = d_rand_coords["sdf_pred"].reshape(-1, 1)
-                    # 生成随机噪声
-                    noise = torch.rand_like(batch_dict['time']) * 0.01 - 0.005  # 这会生成一个范围在 [-0.005, 0.005] 的随机噪声
+                    # # 生成随机噪声
+                    # noise = torch.rand_like(batch_dict['time']) * 0.002 - 0.001
+                    # batch_dict['time'] += noise  # 将噪声添加到 x
+                    # _, d_rand_coords_offset = model(batch_dict)
+                    # d_rand_coords_offset = d_rand_coords_offset["sdf_pred"].reshape(-1, 1)
+                    # Time_EDR_loss = nn.functional.mse_loss(d_rand_coords, d_rand_coords_offset)
+                    
+                    noise = torch.rand_like(batch_dict['time']) * 0.001
+                    # 1
                     batch_dict['time'] += noise  # 将噪声添加到 x
-                    _, d_rand_coords_offset = model(batch_dict)
-                    d_rand_coords_offset = d_rand_coords_offset["sdf_pred"].reshape(-1, 1)
-                    Time_EDR_loss = nn.functional.mse_loss(d_rand_coords, d_rand_coords_offset)
+                    _, d_rand_coords_1 = model(batch_dict)
+                    d_rand_coords_1 = d_rand_coords_1["sdf_pred"].reshape(-1, 1)
+                    # 2
+                    batch_dict['time'] -= noise  # 将噪声添加到 x
+                    _, d_rand_coords_2 = model(batch_dict)
+                    d_rand_coords_2 = d_rand_coords_2["sdf_pred"].reshape(-1, 1)
+
+                    Time_EDR_loss = torch.mean(torch.abs(d_rand_coords_1 - 2*d_rand_coords + d_rand_coords_2))
+
+                    state_info['Time_EDR_weight'] = config.loss.Time_EDR_weight
+                    Time_EDR_loss = Time_EDR_loss * config.loss.Time_EDR_weight
                     state_info['Time_EDR_loss'] = Time_EDR_loss.item()
-                    state_info['Time_EDR_weight'] = 1e3
-                    Time_EDR_loss = Time_EDR_loss * 1e3
                     loss += Time_EDR_loss
             # 使用 GradScaler 缩放损失
             scaler.scale(loss).backward()
@@ -316,8 +329,8 @@ def interp_from_lat_vecs(config, results_dir, model, lat_vec, mesh_sdf_dataset):
     # import ipdb; ipdb.set_trace()
     model.eval()
     num_interp = config.dataset.frames[1] - config.dataset.frames[0]
-    num_interp = 10*num_interp
-    logger.info(f" interpolate sdf predicted by sdfnet, len = {num_interp} ")
+    num_interp = num_interp*2
+    logger.info(f" interpolate sdf predicted by sdfnet, len = {num_interp+1} ")
     resolution=128
     with autocast():
         if num_interp == 0:
@@ -337,7 +350,7 @@ def interp_from_lat_vecs(config, results_dir, model, lat_vec, mesh_sdf_dataset):
             for i_interp in range(0, num_interp + 1): 
                 ri = i_interp / num_interp
                 # ri = i_interp
-                # ri = lat_vec[ri]
+                # ri = lat_vec(torch.tensor(i_interp).to(lat_vec.weight.device))
             # for i_interp in [8,9,10,11,12,13,14,15,16]:
             #     ri = i_interp / 8
 
@@ -352,6 +365,84 @@ def interp_from_lat_vecs(config, results_dir, model, lat_vec, mesh_sdf_dataset):
 
                 save_obj(f"{dump_dir}/{i_interp:02d}.obj", verts, faces)
 
+
+def interp_from_DeepSDF(config, results_dir, model, lat_vec, mesh_sdf_dataset):
+    '''
+    Args:
+        recon_lat_vecs: Embedding(D, latent_dim)
+        Full: 26
+    '''
+    # import ipdb; ipdb.set_trace()
+    model.eval()
+    # f = [config.dataset.frames[0], config.dataset.frames[1]]
+    f = [7, 12]
+    num_interp = f[1] - f[0]
+    lat_src_frames = np.array(list(range(f[0], f[1]+1, 1)))
+    N_interp = 0
+    if N_interp > 0:
+        frames = np.linspace(f[0], f[1], num_interp*N_interp+1)
+    else:
+        frames = lat_src_frames
+    logger.info(f" interpolate sdf predicted by sdfnet, len = {num_interp+1} ")
+    resolution=128
+    with autocast():
+        for i_interp in frames: 
+            # import ipdb; ipdb.set_trace()
+            if i_interp in lat_src_frames:
+                ri = lat_vec(torch.tensor(int(i_interp)).to(lat_vec.weight.device))
+            else:
+                lat_1 = lat_vec(torch.tensor(int(i_interp)).to(lat_vec.weight.device))
+                lat_2 = lat_vec(torch.tensor(int(i_interp)+1).to(lat_vec.weight.device))
+                ri = lat_1 * (1 - i_interp%1) + lat_2 * (i_interp%1)
+            
+            dump_dir = get_directory( f"{results_dir}/" )
+            # sdf_grid_pred, contours_pred = mesh.get_sdf_2d_mesh(config, model, interp_lat_vecs, N=256, max_batch=int(2**18), time=ri) 
+            x_range, y_range, z_range = config.loss.get('x_range', [-1, 1]), config.loss.get('y_range', [-1, 1]), config.loss.get('z_range', [-1, 1])
+            verts, faces = implicit_utils.sdf_decode_mesh_from_single_lat(config, model, ri, resolution=resolution, max_batch=int(2 ** 16), offset=None, scale=None, x_range=x_range, y_range=y_range, z_range=z_range)
+            # mesh_sim = trimesh.Trimesh(vertices=verts, faces=faces).simplify_quadratic_decimation(2000)
+            mesh_sim = trimesh.Trimesh(vertices=verts, faces=faces)
+            verts = mesh_sim.vertices
+            faces = mesh_sim.faces
+
+            save_obj(f"{dump_dir}/{i_interp}.obj", verts, faces)
+
+def analysis_smoothness(config, results_dir, model, lat_vecs):
+    
+    '''
+    Args:
+        lat_vecs: Embedding(D, latent_dim)
+    '''
+    # import ipdb; ipdb.set_trace()
+    model.eval()
+    num_interp = 30
+    logger.info(f" interpolate sdf predicted by sdfnet, len = {num_interp} ")
+    resolution=128
+    smoothnesses = []
+    with autocast():
+        for i_interp in range(0, num_interp + 1): 
+            ri = i_interp / num_interp
+            # ri = i_interp
+            # ri = lat_vec[ri]
+        # for i_interp in [8,9,10,11,12,13,14,15,16]:
+        #     ri = i_interp / 8
+            x_range, y_range, z_range = config.loss.get('x_range', [-1, 1]), config.loss.get('y_range', [-1, 1]), config.loss.get('z_range', [-1, 1])
+            smoothness = implicit_utils.smoothness_evaluation(config, model, ri, resolution=resolution, max_batch=int(2 ** 16), offset=None, scale=None, x_range=x_range, y_range=y_range, z_range=z_range)
+            smoothnesses.append(smoothness)
+            # dump_dir = get_directory( f"{results_dir}/" )
+            # sdf_grid_pred, contours_pred = mesh.get_sdf_2d_mesh(config, model, interp_lat_vecs, N=256, max_batch=int(2**18), time=ri) 
+            
+            # verts, faces = implicit_utils.sdf_decode_mesh_from_single_lat(config, model, ri, resolution=resolution, max_batch=int(2 ** 16), offset=None, scale=None, x_range=x_range, y_range=y_range, z_range=z_range)
+            
+            # mesh_sim = trimesh.Trimesh(vertices=verts, faces=faces).simplify_quadratic_decimation(2000)
+            
+            # mesh_sim = trimesh.Trimesh(vertices=verts, faces=faces)
+            # verts = mesh_sim.vertices
+            # faces = mesh_sim.faces
+
+            # save_obj(f"{dump_dir}/{i_interp:02d}.obj", verts, faces)
+
+    logger.info(f"smoothnesses: {smoothnesses}")
+    logger.info(f"mean smoothness: {np.mean(smoothnesses)}")
 
 def save_obj(fname, vertices, faces):
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)

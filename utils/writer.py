@@ -69,7 +69,7 @@ class Writer():
         logger.info(ckpt_path)
 
 
-    def load_checkpoint(self, ckpt_path, model=None, optimizer=None):
+    def load_checkpoint(self, ckpt_path, model=None, lat_vec=None, optimizer=None):
         # in-place load
         ckpt = torch.load(ckpt_path)
         if model is not None:
@@ -78,6 +78,9 @@ class Writer():
         if optimizer is not None:
             logger.info(f"load optimizer from ${ckpt_path}")
             optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        if lat_vec is not None:
+            logger.info(f"load lat_vec from ${ckpt_path}")
+            lat_vec.load_state_dict(ckpt["lat_vec"])
         logger.info("loaded!")
         return ckpt["epoch"]
 

@@ -21,7 +21,7 @@ from torch.cuda.amp import GradScaler
 from utils import utils, mesh_sampling
 from utils.writer import Writer
 from utils.scheduler_utils import *
-from train_eval_unit import train_one_epoch, test_opt_one_epoch, recon_from_lat_vecs, interp_from_lat_vecs, analysis_one_epoch, train_debug_DeepSDF
+from train_eval_unit import train_one_epoch, interp_from_lat_vecs, analysis_smoothness, train_debug_DeepSDF, interp_from_DeepSDF
 import datasets
 from pyutils import *
 
@@ -185,7 +185,7 @@ def main(config):
 
         if config.epoch_continue is not None:
             start_epoch = 1 + writer.load_checkpoint(f"{ckpt_train_dir}/checkpoint_{config.epoch_continue:04d}.pt",
-                                                     model, optimizer_train)
+                                                     model, None, optimizer_train)
             logger.info(f"continue to train from previous epoch = {start_epoch}")
             for _ in range(start_epoch*len(train_loader)):
                 lr_group = adjust_learning_rate(config.optimization[config.rep].schedular, scheduler_train, optimizer_train, start_epoch)
@@ -245,15 +245,31 @@ def main(config):
             mesh_sdf_dataset = test_mesh_sdf_dataset
         else:
             raise ValueError("split is train or test")
-        lat_vecs = None
+        lat_vecs = recon_lat_vecs
+        # lat_vecs = None
 
         # import ipdb; ipdb.set_trace()
 
         results_dir = get_directory( f"{exp_dir}/results/{config.split}/interp_{config.rep}/{config.epoch_continue:04d}" )
 
+        writer.load_checkpoint(f"{log_dir}/ckpt_{config.split}/{config.rep}/checkpoint_{config.epoch_continue:04d}.pt", model, lat_vecs)
+
+        # interp_from_lat_vecs(config, results_dir, model, lat_vecs, mesh_sdf_dataset)
+        
+        interp_from_DeepSDF(config, results_dir, model, lat_vecs, mesh_sdf_dataset)
+
+    elif config.mode == 'analysis':
+        logger.info('>' * 30 + ' analysis smoothness ' + '>' * 30)
+
+        lat_vecs = None
+
+        # import ipdb; ipdb.set_trace()
+
+        results_dir = get_directory( f"{exp_dir}/results/{config.split}/analysis_{config.rep}/{config.epoch_continue:04d}" )
+
         writer.load_checkpoint(f"{log_dir}/ckpt_{config.split}/{config.rep}/checkpoint_{config.epoch_continue:04d}.pt", model)
 
-        interp_from_lat_vecs(config, results_dir, model, lat_vecs, mesh_sdf_dataset)
+        analysis_smoothness(config, results_dir, model, lat_vecs)
         
     else:
         raise NotImplementedError

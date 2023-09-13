@@ -6,5 +6,5 @@ export LD_LIBRARY_PATH=/usr/local/cuda-11.6/lib64:$LD_LIBRARY_PATH
 for value in $(seq 9999 1000 10000)
 do
    # 执行你的命令，使用$value作为continue_from的值
-   CUDA_VISIBLE_DEVICES=3 python main.py --config ./config/run_sdf.yaml --mode interp --rep sdf --split train --continue_from $value
+   CUDA_VISIBLE_DEVICES=3 python main.py --config ./config/run.yaml --mode analysis --rep sdf --split train --continue_from $value
 done

@@ -18,7 +18,9 @@ class SdfDecoder_Modify(nn.Module):
         norm_layers=(),
         latent_in=(),
         xyz_encoder=None,
-        use_xyz_encoder=True,
+        time_encoder=None,
+        use_xyz_encoder=False,
+        use_time_encoder=False,
         lat_dim=256,
         **kwargs
     ):
@@ -29,7 +31,12 @@ class SdfDecoder_Modify(nn.Module):
         else:
             self.xyz_encoder = None
             input_xyz_dim = 3
-        dims = [input_xyz_dim + lat_dim] + list(dims)
+        if use_time_encoder:
+            self.time_encoder, input_time_dim = get_encoder(time_encoder)
+        else:
+            self.time_encoder = None
+            input_time_dim = lat_dim
+        dims = [input_xyz_dim + input_time_dim] + list(dims)
         output_dim = 1
 
         self.num_layers = len(dims)
@@ -39,19 +46,20 @@ class SdfDecoder_Modify(nn.Module):
 
         for layer in range(0, self.num_layers - 1):
             if layer + 1 in latent_in:
-                out_dim = dims[layer + 1] - (input_xyz_dim)
+                out_dim = dims[layer + 1] - (input_time_dim+input_xyz_dim)
             else:
                 out_dim = dims[layer + 1]
 
             if layer in self.norm_layers:
                 Layer = nn.Sequential(
-                    nn.Linear(dims[layer], out_dim, bias=False), nn.LayerNorm(out_dim), nn.GELU()
+                    nn.utils.weight_norm(nn.Linear(dims[layer], out_dim, bias=False)),nn.ReLU()
                 )
             else:
                 Layer = nn.Sequential(
-                    nn.Linear(dims[layer], out_dim), nn.GELU()
+                    nn.Linear(dims[layer], out_dim), nn.ReLU()
                 )
             self.Layers.append(Layer)
+
 
         self.dropout_prob = dropout_prob
         self.dropout = dropout
@@ -72,10 +80,10 @@ class SdfDecoder_Modify(nn.Module):
             xyz_encoding = self.xyz_encoder(xyz)
         else:
             xyz_encoding = xyz
+        if self.time_encoder is not None:
+            lat_vec = self.time_encoder(lat_vec)
         x = torch.cat([lat_vec, xyz_encoding], dim=-1)
-        x_input = xyz_encoding
-        # x = torch.cat([time_MLP, xyz_MLP], dim=-1) # (N, L+query_dim)
-        # x_input = torch.cat([time_encoding, xyz_encoding], dim=-1)
+        x_input = x
 
         for layer in range(0, self.num_layers-1):
             Layer = self.Layers[layer]

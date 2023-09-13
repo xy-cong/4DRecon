@@ -1,9 +1,9 @@
 seed: 1
-dataset_name: 0-25_32-16-freq-MLPt
+dataset_name: 0-25_32-16-freq-MLPt_TimeEDR_2jie_6999_1e4
 data_dir: data/DeformingThings4D/animals
-work_dir: ./Test_DeepSDF_New/${dataset_name}
+work_dir: ./Debug_Interp/${dataset_name}
 exp_name: bear3EP_attack1
-latent_dim: 8 # 8
+latent_dim: 1 # 8
 num_workers: 13 # 16
 
 dataset:
@@ -100,7 +100,8 @@ loss:
     data_term_gradient_weight: 5e1 # 5e1
     inter_constraint_loss: False
     EDR: False
-    time_EDR: False
+    Time_EDR: True
+    Time_EDR_weight: 1e4
     data_term_inter_constraint_weight: 1e2
     data_term_surface_normal_weight: 1e2
     sdf_asap_weight: 10.

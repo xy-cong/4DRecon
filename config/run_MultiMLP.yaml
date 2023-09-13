@@ -1,7 +1,7 @@
 seed: 1
-dataset_name: 0-25_32-16-freq-MLPt_arap_5e1_2000_6000
+dataset_name: 0_25_256_level_2_xyz_encoding_time_8
 data_dir: data/DeformingThings4D/animals
-work_dir: ./Test_DeepSDF_New/${dataset_name}
+work_dir: ./Test_Multi_MLP/${dataset_name}
 exp_name: bear3EP_attack1
 latent_dim: 1 # 8
 num_workers: 13 # 16
@@ -90,8 +90,8 @@ loss:
     data_term_inter_constraint_weight: 1e2
     data_term_surface_normal_weight: 1e2
     sdf_asap_weight: 1e1
-    sdf_arap_begin_epoch: 2000 #1999
-    sdf_arap_end_epoch: 6001 #2000
+    sdf_arap_begin_epoch: 12000 #1999
+    sdf_arap_end_epoch: 16001 #2000
     code_reg_weight: 0 # 0.0001
     # SDF surfafe ARAP loss
     topology_PD_loss: False

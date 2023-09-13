@@ -1,9 +1,9 @@
 seed: 1
-dataset_name: DeepSDF_256_lat_dim_128_xyz_encoding
+dataset_name: DeepSDF_512_lat_dim_256_xyz_encoding
 data_dir: data/DeformingThings4D/animals
 work_dir: ./Debug_DeepSDF/${dataset_name}
 exp_name: bear3EP_attack1
-latent_dim: 128 # 8
+latent_dim: 256 # 8
 num_workers: 13 # 16
 
 dataset:
@@ -52,7 +52,7 @@ model:
     Modify_sdf:
         module_name: NGP_3Dsdfnet_GT
         class_name: SdfNet
-        dims : [ 256, 512, 512, 512, 512, 256, 256, 256]
+        dims : [ 512, 512, 512, 512, 512, 512, 512, 512]
         dropout : [0, 1, 2, 3, 4, 5, 6, 7]
         dropout_prob : 0.02
         norm_layers : [0, 1, 2, 3, 4, 5, 6, 7] # [0, 1, 2, 3, 4, 5, 6, 7]

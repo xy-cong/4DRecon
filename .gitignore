@@ -11,7 +11,9 @@ data/simple_data
 data/bunny_normal
 work_dir/
 Debug_DeepSDF/
+Debug_Interp/
 Test_DeepSDF_New/
+Test_Multi_MLP/
 Test_freenerf/
 Test_NGP_Warp
 models/siren.py

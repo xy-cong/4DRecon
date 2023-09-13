@@ -108,9 +108,9 @@ class SdfNet(nn.Module):
         # import ipdb; ipdb.set_trace()
         # idx = batch_dict['idx'].int().reshape(-1, 1) # (B, 1)
         # import ipdb; ipdb.set_trace()
-        batch_vecs = batch_dict['idx'].reshape(-1, 1) # (B, lat_size)
+        batch_vecs = batch_dict['time'] # (B, lat_size)
         query = batch_dict['point_samples'].clone().detach().requires_grad_(True) # (B, S, query_dim)
-
+        query = query.repeat(batch_vecs.shape[0], 1, 1) # (B, S, query_dim)
         B, S = query.shape[0], query.shape[1]
         sdf_pred = self.decoder(repeat(batch_vecs, 'B d -> (B S) d', S=S),
                                 rearrange(query, 'B S d -> (B S) d'),

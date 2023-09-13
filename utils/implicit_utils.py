@@ -30,6 +30,91 @@ def sdf_decode_from_meshgrid(config, model, time, resolution=128, max_batch=int(
     sdf_volume = np.concatenate(sdf_volume_xyz, axis=1).reshape(time.shape[0], grid['xsize'], grid['ysize'], grid['zsize']) # XYZ
     return torch.from_numpy(sdf_volume).cuda()
 
+def smoothness_evaluation(config, model, time, resolution=256, voxel_size=None, max_batch=int(2 ** 18), offset=None, scale=None, points_for_bound=None, verbose=False, x_range=[-1, 1], y_range=[-0.7, 1.7], z_range=[-1.1, 0.9]):
+    """
+    Plan A:
+        for each time, randomly sample N points, calculate SDF, P_{i-delta} - 2P_i + P_{i+delta}
+    Plan B:
+        EDR
+    """
+    if resolution is not None:
+        grid = get_grid_uniform_YXZ(resolution, x_range=x_range, y_range=y_range, z_range=z_range)
+    # import ipdb; ipdb.set_trace()
+    if isinstance(time, torch.Tensor):
+        time = time.reshape(-1, 1).float().cuda()
+    else:
+        time = torch.tensor(time).reshape(-1, 1).float().cuda()
+    # noise = torch.rand_like(time) * 0.001
+    # if time == 0:
+    #     time_0 = time
+    #     time_1 = time + noise
+    #     time_2 = time + 2 * noise
+    # elif time == 1:
+    #     time_0 = time - 2 * noise
+    #     time_1 = time - noise
+    #     time_2 = time
+    # else:
+    #     time_0 = time - noise
+    #     time_1 = time
+    #     time_2 = time + noise
+    # time = torch.cat([time_0, time_1, time_2], dim=0)
+    noise = torch.rand_like(time) * 0.002 - 0.001  # 这会生成一个范围在 [-0.001, 0.001] 的随机噪声
+    if time == 1:
+        time_0 = time - noise
+        time_1 = time
+    else:
+        time_0 = time
+        time_1 = time + noise
+    time = torch.cat([time_0, time_1], dim=0)
+    grid['grid_points'] = grid['grid_points'].reshape(grid['ysize'], grid['xsize'], grid['zsize'], 3).permute([1, 0, 2, 3]).reshape(-1, 3)
+    sdf_volume_xyz = []
+    ptn_samples_list = torch.split(grid['grid_points'], max_batch, dim=0)
+    batch_dict = {}
+    
+    for ptn_samples in ptn_samples_list:
+        ptn_samples.requires_grad = False
+        batch_dict['point_samples'] = ptn_samples[None, :, :].repeat(time.shape[0], 1, 1).to(time.device)
+        batch_dict['time'] = time
+        batch_dict = model.get_sdf_from_samples(batch_dict) 
+        sdf_samples = batch_dict["sdf_pred"].detach().cpu().numpy()
+        sdf_volume_xyz.append(sdf_samples)
+    # import ipdb; ipdb.set_trace()
+    sdf_volume = np.concatenate(sdf_volume_xyz, axis=1).reshape(time.shape[0], grid['xsize'], grid['ysize'], grid['zsize']) # XYZ
+    # smoothness = np.mean(np.abs(sdf_volume[0] - 2 * sdf_volume[1] + sdf_volume[2]))
+    smoothness = np.mean(np.abs(sdf_volume[0] - sdf_volume[1]))
+    return smoothness
+
+    # # import ipdb; ipdb.set_trace()
+    # if isinstance(latent_vec, torch.Tensor):
+    #     latent_vec = latent_vec.reshape(-1, 1).float().cuda()
+    # else:
+    #     latent_vec = torch.tensor(latent_vec).reshape(-1, 1).float().cuda()
+    # noise = torch.rand_like(latent_vec) * 0.02 - 0.01  # 这会生成一个范围在 [-0.01, 0.01] 的随机噪声
+    # rand_coords = torch.rand((65536,3)) * 2 - 1
+    # if latent_vec == 0:
+    #     latent_vec_0 = latent_vec
+    #     latent_vec_1 = latent_vec + noise
+    #     latent_vec_2 = latent_vec + 2 * noise
+    # elif latent_vec == 1:
+    #     latent_vec_0 = latent_vec - 2 * noise
+    #     latent_vec_1 = latent_vec - noise
+    #     latent_vec_2 = latent_vec
+    # else:
+    #     latent_vec_0 = latent_vec - noise
+    #     latent_vec_1 = latent_vec
+    #     latent_vec_2 = latent_vec + noise
+    # lat_vec = torch.cat([latent_vec_0, latent_vec_1, latent_vec_2], dim=0)
+
+    # batch_dict = {}
+    # batch_dict['point_samples'] = repeat(rand_coords, 'S d -> 3 S d').to(lat_vec.device)
+    # batch_dict['time'] = lat_vec
+    # batch_dict['idx'] = lat_vec
+    # batch_dict = model.get_sdf_from_samples(batch_dict) 
+    # sdf_samples = batch_dict["sdf_pred"].detach().cpu().numpy()
+
+    # smoothness = np.mean(np.abs(sdf_samples[0] - 2 * sdf_samples[1] + sdf_samples[2]))
+
+    # return smoothness
 
 
 def sdf_decode_mesh_from_single_lat(config, model, latent_vec, resolution=256, voxel_size=None, max_batch=int(2 ** 18), offset=None, scale=None, points_for_bound=None, verbose=False, x_range=[-1, 1], y_range=[-0.7, 1.7], z_range=[-1.1, 0.9]):
@@ -51,9 +136,9 @@ def sdf_decode_mesh_from_single_lat(config, model, latent_vec, resolution=256, v
         grid = get_grid_from_size_YXZ(points_for_bound, voxel_size)
     # import ipdb; ipdb.set_trace()
     if isinstance(latent_vec, torch.Tensor):
-        latent_vec = latent_vec.reshape(-1, 1).float().cuda()
+        latent_vec = latent_vec[None, ...].float().cuda()
     else:
-        latent_vec = torch.tensor(latent_vec).reshape(-1, 1).float().cuda()
+        latent_vec = torch.tensor(latent_vec)[None, ...].float().cuda()
     grid['grid_points'] = grid['grid_points'].reshape(grid['ysize'], grid['xsize'], grid['zsize'], 3).permute([1, 0, 2, 3]).reshape(-1, 3)
     sdf_volume_xyz = []
     ptn_samples_list = torch.split(grid['grid_points'], max_batch, dim=0)
